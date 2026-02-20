@@ -1,9 +1,9 @@
 # Arkivator – Product Requirements Document
 
-**Version:** 1.1
+**Version:** 1.2
 **Date:** 2026-02-20
 **Status:** Draft
-**Changelog:** v1.1 — added security architecture (§15), App Store publishing path (§14), expanded privacy/compliance (§11), usability patterns (§10.4–10.5), additional risks/open questions, and formalized multi-page stitching as a committed v1.1 extension aligned across scope, stories, and roadmap sections.
+**Changelog:** v1.1 — added security architecture (§15), App Store publishing path (§14), expanded privacy/compliance (§11), usability patterns (§10.4–10.5), additional risks/open questions, and formalized multi-page stitching as a committed v1.1 extension aligned across scope, stories, and roadmap sections. v1.2 — resolved all remaining open questions (§16): Bokmål-only UI, standard accessibility, quick scan deferred to v1.1, no HealthKit, metered LLM credits, personnummer redaction tool in v1.0, TestFlight-only for v1.0 public distribution; updated scope (§5), user stories (§6), subscription model (§14.7), and App Store publishing path (§14.2–14.3) to reflect decisions.
 
 ---
 
@@ -76,6 +76,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 - Per-person sub-folders (e.g., one folder per family member)
 - In-app document list with local search
 - Manual edit/correction of extracted text, title, and tags before upload
+- In-app personnummer redaction tool: one-tap redaction of national ID in exported `.docx` files before sharing with third parties
 
 ### 5.2 Out of Scope (v1.0)
 
@@ -90,6 +91,8 @@ The result is a private, AI-queryable health archive for the whole family, store
 
 - Multi-page document capture and stitching into one ordered document bundle
 - Canonical multi-page storage: one merged `.docx` + one combined paginated `.pdf` per document with consistent metadata
+- Quick scan mode: user-toggleable option that skips the manual review step and uploads immediately using AI-generated metadata (power-user feature)
+- Public App Store listing (v1.0 is TestFlight-only)
 
 ---
 
@@ -103,6 +106,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 | C-2 | As a user, I want the app to enhance the image (remove shadows, correct skew, boost contrast) so the text is clearly readable. | Must |
 | C-3 | As a user, I want to retake or manually crop the image before processing if the auto-crop is wrong. | Must |
 | C-4 | As a user, I want to capture multiple pages of a multi-page document as a batch. | Must (v1.1) |
+| C-5 | As a power user, I want to enable a "quick scan" mode that skips the review screen and uploads immediately using AI-generated metadata, so I can file documents faster. | Must (v1.1) |
 
 ### Epic 2 – Extraction & Classification
 
@@ -134,6 +138,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 | L-3 | As a user, I want to filter the library by person, document type, and date range. | Must |
 | L-4 | As a user, I want to tap a document and read the full extracted text and view the original image. | Must |
 | L-5 | As a user, I want to copy the full text of a document to the clipboard so I can paste it into ChatGPT or another AI tool for explanation. | Must |
+| L-6 | As a user, I want to export a redacted version of a document with all personnummer occurrences replaced by "REDACTED", so I can safely share it with a new doctor or specialist. | Must |
 
 ### Epic 5 – Family & Settings
 
@@ -513,19 +518,21 @@ Phase 1: Internal Development
     └─▶ Unit tests + UI tests in Xcode (XCTest)
     └─▶ Static analysis: SwiftLint, custom PII-leak rules
 
-Phase 2: TestFlight Beta
+Phase 2: TestFlight — v1.0 (primary release channel)
     └─▶ Archive & upload build to App Store Connect
     └─▶ Internal testing (up to 100 team members, no App Review required)
     └─▶ External testing (up to 10,000 testers, requires Beta App Review)
     └─▶ Iterate on feedback; fix critical bugs
     └─▶ Validate OCR accuracy on diverse Norwegian medical documents
     └─▶ Validate Google Drive sync reliability across network conditions
+    └─▶ NOTE: v1.0 is TestFlight-only. No public App Store listing until v1.1.
 
-Phase 3: App Store Submission
+Phase 3: App Store Submission — v1.1
+    └─▶ Incorporate v1.0 TestFlight learnings
     └─▶ Final pre-submission checklist (see §14.4)
     └─▶ Submit for App Review
     └─▶ Respond to reviewer questions/rejections (if any)
-    └─▶ Approved → Release
+    └─▶ Approved → Public App Store Release (v1.1)
 
 Phase 4: Post-Launch
     └─▶ Monitor crash reports (Xcode Organizer + Crashlytics)
@@ -543,8 +550,8 @@ Phase 4: Post-Launch
 | **Primary language** | Norwegian (Bokmål) |
 | **Category** | Productivity (primary) · Health & Fitness (secondary) |
 | **Age rating** | 4+ (no objectionable content; health data is user's own) |
-| **Price** | Free (v1.0); subscription IAP added in v1.x (see §14.7) |
-| **Availability** | Norway initially; expand to Nordics and worldwide as localisation is added |
+| **Price** | Free (v1.0 and v1.1); subscription IAP added in v1.x (see §14.7) |
+| **Availability** | v1.0: TestFlight only (no public listing). v1.1: Norway App Store initially; expand to Nordics and worldwide as localisation is added. |
 | **Content rights** | Declare no third-party content; all generated files are user-owned |
 
 ### 14.4 Pre-Submission Checklist
@@ -598,9 +605,16 @@ A public privacy policy (hosted at e.g. `https://arkivator.no/privacy`) must cov
 
 | Phase | Model | Details |
 |-------|-------|---------|
-| **v1.0** | Free | Core scanning, OCR (on-device), Drive sync included. User supplies own API key for cloud LLM features. No IAP. |
-| **v1.x** | Freemium + Subscription | Free tier retains all v1.0 features. "Arkivator Pro" subscription ($X/month or $Y/year) bundles: cloud LLM quota (no API key needed), priority OCR fallback, multi-page scanning. |
+| **v1.0** | Free | Core scanning, OCR (on-device), Drive sync included. User supplies own API key for cloud LLM features. No IAP. Distributed via TestFlight only. |
+| **v1.x** | Freemium + Subscription + Consumable IAP | Free tier retains all v1.0 features. "Arkivator Pro" subscription ($X/month or $Y/year) includes a **monthly credit allowance** for cloud LLM document classification (metered per-document); additional credit packs available as consumable IAP. Also bundles: priority OCR fallback, multi-page scanning, quick scan mode. |
 | **v2+** | Subscription tiers | Additional tiers for family sharing, expanded storage integrations (iCloud, Dropbox), and in-app AI assistant. |
+
+**Credit model details (v1.x):**
+- Each cloud LLM classification call costs 1 credit.
+- Subscription tier includes a fixed monthly credit allowance (exact amount TBD at pricing time).
+- Credits do not roll over month to month.
+- Additional credit packs (e.g., 50 credits, 200 credits) are available as consumable StoreKit 2 IAP.
+- Free-tier users who supply their own API key are not subject to the credit system.
 
 **StoreKit 2 implementation:**
 - Use `Product.SubscriptionInfo` for subscription management
@@ -704,18 +718,18 @@ App Launch
 
 ## 16. Open Questions
 
-Items 1–6 carried over from the original draft; items 7–10 are new.
+Items 1–6 carried over from the original draft; items 7–10 are new. All items resolved as of v1.2.
 
-1. Should the app support Norwegian Nynorsk in addition to Bokmål for UI strings?
+1. ~~Should the app support Norwegian Nynorsk in addition to Bokmål for UI strings?~~ **Decided: Bokmål only** — v1.0 ships with Norwegian Bokmål as the sole Norwegian UI language. Nynorsk localisation can be added in a future release if demand arises.
 2. ~~What is the preferred minimum iOS version?~~ **Decided: iOS 18+** — enables Apple Intelligence on-device LLM for document classification on iPhone 15/16 series.
 3. ~~Should the app be free, paid upfront, or subscription-based?~~ **Decided: phased approach** — v1.0 ships as a free personal tool (user supplies their own cloud LLM API key if desired); a future App Store release will use a subscription model that bundles cloud LLM quota for non-technical users.
-4. Is there a requirement to support physical accessibility needs (e.g., Braille display, large text) beyond standard VoiceOver?
+4. ~~Is there a requirement to support physical accessibility needs (e.g., Braille display, large text) beyond standard VoiceOver?~~ **Decided: standard only** — comply with the existing WCAG AA, VoiceOver, and Dynamic Type requirements already specified in §8. No additional physical-accessibility work (Switch Control, Braille display) is required for v1.0.
 5. ~~Should the personnummer (national ID) field in family profiles be optional/masked for privacy, or is it needed for reliable person matching?~~ **Decided: optional & masked** — personnummer is optional in family profiles; when stored, it is encrypted and masked in the UI (see §11.3).
-6. Is there an appetite for a "quick scan" mode that skips the review step and uploads immediately with AI-generated metadata (power-user feature)?
-7. Should the app integrate with Apple's HealthKit for structured health record data, or remain document-only?
-8. For the subscription model (v2), should cloud LLM usage be metered (per-document) or unlimited within the subscription tier?
-9. Should the app offer an in-app personnummer redaction tool for users who want to share `.docx` files with third parties (e.g., a new doctor) but want to strip the national ID first?
-10. Is TestFlight-only distribution (no public App Store listing) acceptable for v1.0, with a public listing in v1.1 after user validation?
+6. ~~Is there an appetite for a "quick scan" mode that skips the review step and uploads immediately with AI-generated metadata (power-user feature)?~~ **Decided: yes, scheduled for v1.1** — quick scan mode is a committed v1.1 extension (see §5.3). v1.0 retains the mandatory review step for all scans.
+7. ~~Should the app integrate with Apple's HealthKit for structured health record data, or remain document-only?~~ **Decided: document-only** — no HealthKit integration. The app's scope is digitising and filing paper documents; writing structured data to HealthKit is out of scope for all current versions.
+8. ~~For the subscription model (v2), should cloud LLM usage be metered (per-document) or unlimited within the subscription tier?~~ **Decided: metered (per-document credits)** — each cloud LLM classification call consumes one credit. Subscribers receive a monthly credit allowance included in the subscription price; additional credit packs are available as consumable IAP (see §14.7).
+9. ~~Should the app offer an in-app personnummer redaction tool for users who want to share `.docx` files with third parties (e.g., a new doctor) but want to strip the national ID first?~~ **Decided: yes, include in v1.0** — a one-tap redaction button is added to the document detail screen; it replaces all personnummer occurrences in the exported `.docx` with `REDACTED` and saves a separate redacted copy (see §5.1 and user story L-6).
+10. ~~Is TestFlight-only distribution (no public App Store listing) acceptable for v1.0, with a public listing in v1.1 after user validation?~~ **Decided: TestFlight only for v1.0** — v1.0 is distributed exclusively via TestFlight to validate with real users before the public App Store release in v1.1 (see §14.2).
 
 ---
 
