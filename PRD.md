@@ -3,7 +3,7 @@
 **Version:** 1.1
 **Date:** 2026-02-20
 **Status:** Draft
-**Changelog:** v1.1 — added security architecture (§15), App Store publishing path (§14), expanded privacy/compliance (§11), usability patterns (§10.4–10.5), and additional risks/open questions.
+**Changelog:** v1.1 — added security architecture (§15), App Store publishing path (§14), expanded privacy/compliance (§11), usability patterns (§10.4–10.5), additional risks/open questions, and formalized multi-page stitching as a committed v1.1 extension aligned across scope, stories, and roadmap sections.
 
 ---
 
@@ -78,9 +78,14 @@ The result is a private, AI-queryable health archive for the whole family, store
 - Android support
 - Non-Google cloud providers (iCloud, Dropbox) — considered for v2
 - Direct AI chat interface within the app (user exports text to preferred AI tool)
-- Multi-page document stitching (v1 handles single-sheet photos; v2 target)
+- Multi-page document stitching is not part of v1.0 (v1.0 supports single-page capture only), but is a required extension in v1.1.
 - Sharing documents with third parties directly from the app
 - FHIR or HelseNorge API integration
+
+### 5.3 Planned Extension (v1.1)
+
+- Multi-page document capture and stitching into one ordered document bundle
+- Export stitched result as a single paginated `.docx` / `.pdf` pair with consistent metadata
 
 ---
 
@@ -93,7 +98,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 | C-1 | As a user, I want to photograph a document and have the app automatically detect and crop the page so I don't need to frame it perfectly. | Must |
 | C-2 | As a user, I want the app to enhance the image (remove shadows, correct skew, boost contrast) so the text is clearly readable. | Must |
 | C-3 | As a user, I want to retake or manually crop the image before processing if the auto-crop is wrong. | Must |
-| C-4 | As a user, I want to capture multiple pages of a multi-page document as a batch. | Should (v1.1) |
+| C-4 | As a user, I want to capture multiple pages of a multi-page document as a batch. | Must (v1.1) |
 
 ### Epic 2 – Extraction & Classification
 
@@ -437,7 +442,7 @@ The following data types must be declared in App Store Connect (see also §14.5)
 
 ## 13. Future Considerations (v2+)
 
-- **Multi-page document support:** stitch multiple photos into a single paginated `.docx` / PDF.
+- **Cross-provider storage support:** optional iCloud Drive/Dropbox connectors beyond Google Drive.
 - **iCloud Drive & Dropbox support** as alternative storage backends.
 - **In-app AI assistant:** Tap "Ask about this document" to get a plain-language Norwegian explanation of any document via an integrated LLM chat.
 - **HelseNorge / FHIR integration:** Cross-reference scanned documents with the user's official digital health record.
