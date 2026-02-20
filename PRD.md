@@ -55,6 +55,10 @@ The result is a private, AI-queryable health archive for the whole family, store
 | Auto-tag documents correctly ≥90% of the time | Tagging precision |
 | Users can retrieve any document within 30 seconds via search | Search latency + user testing |
 | Zero documents lost (reliable cloud sync) | Sync failure rate < 0.1% |
+| Ensure stitched multi-page bundles keep correct order and page completeness | Multi-page stitch integrity ≥99% on 3–10 page test sets |
+| Keep multi-page filing fast enough for household use | End-to-end processing ≤90 seconds for a 5-page document on iPhone 15 |
+| Maintain OCR quality across multi-page scans | OCR accuracy ≥94% averaged across pages, with per-page minimum ≥90% |
+| Minimize manual correction effort in multi-page mode | ≤15% of multi-page captures require reorder or page recapture before upload |
 
 ---
 
@@ -68,7 +72,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 - Structured document title generation: `YYYY-MM-DD <Descriptive Title>`
 - Semantic tagging (document type, person, medical specialty, date, institution)
 - Google Drive integration: OAuth2 sign-in, folder selection, automatic folder routing
-- Dual storage: `.docx` text file + `.jpeg`/`.pdf` image file per document
+- Canonical single-page storage: one `.docx` text file + one `.jpeg` visual file per document
 - Per-person sub-folders (e.g., one folder per family member)
 - In-app document list with local search
 - Manual edit/correction of extracted text, title, and tags before upload
@@ -85,7 +89,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 ### 5.3 Planned Extension (v1.1)
 
 - Multi-page document capture and stitching into one ordered document bundle
-- Export stitched result as a single paginated `.docx` / `.pdf` pair with consistent metadata
+- Canonical multi-page storage: one merged `.docx` + one combined paginated `.pdf` per document with consistent metadata
 
 ---
 
@@ -116,7 +120,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 |----|-------|----------|
 | S-1 | As a user, I want to sign in with my Google account and grant Drive access from within the app. | Must |
 | S-2 | As a user, I want to define a root folder in Drive and sub-folders per family member so files go to the right place automatically. | Must |
-| S-3 | As a user, I want each document to be stored as both a `.docx` text file and a high-quality image (`.jpeg` or combined `.pdf`) in the appropriate folder. | Must |
+| S-3 | As a user, I want each document to be stored in canonical artifacts (`.docx` + `.jpeg` for single-page, `.docx` + combined `.pdf` for multi-page) in the appropriate folder. | Must |
 | S-4 | As a user, I want uploads to happen in the background so I can continue using the app. | Should |
 | S-5 | As a user, I want to see upload status (queued / uploading / done / error) for each document. | Must |
 | S-6 | As a user, I want failed uploads to be retried automatically and to receive a notification if they consistently fail. | Should |
@@ -201,8 +205,12 @@ Tags are stored locally in a SQLite database (via Core Data) and embedded in the
       ├── Dokumenter/
       └── Bilder/
   ```
-- File naming: `<title>.docx` and `<title>.jpeg` (title is the generated `YYYY-MM-DD ...` string, sanitised for filesystem).
+- File naming:
+  - Single-page: `<title>.docx` + `<title>.jpeg`
+  - Multi-page (v1.1): `<title>.docx` + `<title>.pdf`
+  (title is the generated `YYYY-MM-DD ...` string, sanitised for filesystem).
 - If a file with the same name exists, append `(2)`, `(3)`, etc.
+- Per-page intermediary images in multi-page mode are treated as transient local cache and are deleted after successful upload unless the user explicitly enables a debug-retention setting.
 - Upload queue: persisted locally so uploads survive app restarts.
 
 ### 7.6 Document Type Taxonomy
@@ -227,6 +235,35 @@ Each generated `.docx` contains:
 2. **Body:** Full OCR-extracted text, preserving paragraph structure. Low-confidence passages marked in yellow highlight.
 3. **Footer:** Scan date, app version, original filename reference.
 4. **Custom Properties:** All tags from §7.4 as key-value pairs (machine-readable).
+
+### 7.8 Multi-page Stitching Specification (v1.1)
+
+- **Capture flow:** Users can add pages sequentially, review page thumbnails, delete a page, retake a page, and reorder pages via drag-and-drop before processing.
+- **Stitching rules:**
+  - Preserve user-defined thumbnail order as canonical order.
+  - Normalize orientation per page before merge.
+  - Apply page boundary cleanup (crop + deskew) independently per page.
+- **OCR behavior:**
+  - Run OCR per page and store per-page confidence.
+  - Produce one merged text body in page order for the `.docx` output.
+  - Flag pages below confidence threshold for focused review instead of blocking the full bundle.
+- **Metadata and classification logic:**
+  - Infer title/date/docType/person from the full page set.
+  - If conflicts exist across pages, prioritize explicit first-page header values, then resolve with highest-confidence extraction from later pages.
+- **Review UX:**
+  - Show a combined review screen with page-strip thumbnails + metadata panel.
+  - User can fix one page (retake/reorder) without restarting the entire document.
+- **Output contract:**
+  - Single-page: canonical artifacts are `.docx` + `.jpeg`.
+  - Multi-page: canonical artifacts are merged `.docx` + combined paginated `.pdf`.
+
+#### 7.8.1 Acceptance Criteria (v1.1)
+
+1. Reordered pages in review must be reflected identically in exported `.pdf` page sequence and merged `.docx` text order.
+2. Deleting or retaking one page must not invalidate previously approved pages in the same batch.
+3. A 5-page document must produce exactly two cloud artifacts (`.docx`, `.pdf`) with matching base filename.
+4. Low-confidence pages must be visibly flagged with page-level indicators before upload.
+5. Multi-page upload retries must be atomic per bundle (never leave `.docx` without its corresponding `.pdf`).
 
 ---
 
@@ -443,7 +480,6 @@ The following data types must be declared in App Store Connect (see also §14.5)
 ## 13. Future Considerations (v2+)
 
 - **Cross-provider storage support:** optional iCloud Drive/Dropbox connectors beyond Google Drive.
-- **iCloud Drive & Dropbox support** as alternative storage backends.
 - **In-app AI assistant:** Tap "Ask about this document" to get a plain-language Norwegian explanation of any document via an integrated LLM chat.
 - **HelseNorge / FHIR integration:** Cross-reference scanned documents with the user's official digital health record.
 - **Shared family vault:** Invite a co-parent or caregiver to access the same Drive structure.
