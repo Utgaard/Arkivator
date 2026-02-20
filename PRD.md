@@ -3,7 +3,7 @@
 **Version:** 1.1
 **Date:** 2026-02-20
 **Status:** Draft
-**Changelog:** v1.1 — added security architecture (§15), App Store publishing path (§14), expanded privacy/compliance (§11), usability patterns (§10.4–10.5), and additional risks/open questions.
+**Changelog:** v1.1 — added security architecture (§15), App Store publishing path (§14), expanded privacy/compliance (§11), multi-page document assembly requirements (§7.8, §10.5), usability patterns (§10.6), and additional risks/open questions.
 
 ---
 
@@ -78,7 +78,7 @@ The result is a private, AI-queryable health archive for the whole family, store
 - Android support
 - Non-Google cloud providers (iCloud, Dropbox) — considered for v2
 - Direct AI chat interface within the app (user exports text to preferred AI tool)
-- Multi-page document stitching (v1 handles single-sheet photos; v2 target)
+- Multi-page document stitching is not included in v1.0 GA; delivered in v1.1 per §7.8
 - Sharing documents with third parties directly from the app
 - FHIR or HelseNorge API integration
 
@@ -223,6 +223,82 @@ Each generated `.docx` contains:
 3. **Footer:** Scan date, app version, original filename reference.
 4. **Custom Properties:** All tags from §7.4 as key-value pairs (machine-readable).
 
+
+### 7.8 Multi-Page Document Assembly (v1.1)
+
+This section defines the canonical behavior for building, reviewing, and exporting multi-page documents captured in one scan session.
+
+#### 7.8.1 Capture flow (add/remove/reorder before processing)
+
+- A multi-page session starts when the user taps **Scan multi-page** from the capture entry point.
+- Each shutter event appends a page thumbnail to a bottom filmstrip in capture order (`pageIndex` starting at 1).
+- Before processing, the user can:
+  - **Add page** (capture another page)
+  - **Remove page** (delete selected thumbnail with undo snackbar for 5 seconds)
+  - **Reorder pages** (drag-and-drop thumbnails)
+  - **Replace page** (retake a single selected page in place)
+- Processing is disabled until at least one page exists.
+
+#### 7.8.2 Stitching rules
+
+- **Deterministic order:** Exported page order MUST match the final thumbnail order at the instant the user taps **Process**.
+- **Rotation normalization:** Every page is normalized to upright orientation (0°) using Vision orientation + text-direction heuristics before OCR/export.
+- **Page boundary handling:**
+  - Output PDF preserves explicit page boundaries; text from one page never spills into another page container.
+  - Cropping/perspective correction is applied per page, then locked before stitching.
+  - Mixed page sizes are allowed; each page retains its own aspect ratio in the combined PDF.
+
+#### 7.8.3 OCR behavior
+
+- OCR runs **per page** and stores `ocrConfidence` per page plus an aggregate document confidence.
+- The app produces:
+  - Page-level text blocks (for per-page review)
+  - A merged full-document text stream ordered by final page sequence
+- Low-quality pages are surfaced via:
+  - A warning badge on affected thumbnails (`Low confidence`)
+  - A document-level banner when any page confidence < 0.70
+  - Highlighting of low-confidence spans in the merged text editor
+
+#### 7.8.4 Storage outputs (multi-page)
+
+For each multi-page document, the app uploads:
+
+1. **One combined PDF**: `<title>.pdf` containing all pages in final order.
+2. **Optional per-page JPEGs**: `<title>_p01.jpeg`, `<title>_p02.jpeg`, ... only when `Save page images` is enabled in Settings (default: enabled for v1.1).
+3. **One merged `.docx`**: `<title>.docx` containing the full merged OCR text in final order, with optional page-break markers (`--- Page N ---`).
+
+No additional per-page `.docx` files are generated.
+
+#### 7.8.5 Title and tag inference logic
+
+- Metadata extraction runs on the merged text plus page-level signals.
+- Conflict resolution precedence:
+  1. **First-page priority** for document title seed, issuing institution header, and primary document type.
+  2. **All-page aggregation** for person matching, keywords, and secondary tags.
+  3. **Date resolution rule:** choose the most clinically relevant date using type-aware rules (e.g., appointment date for `innkalling`, issue date for `epikrise`); if unresolved, fall back to first-page date and flag for review.
+- When conflicting high-confidence entities remain, the review screen shows a `Resolve conflict` picker before save/upload.
+
+#### 7.8.6 Review UX (without restarting full scan)
+
+- The review screen includes a persistent thumbnail rail above the metadata form.
+- Users can tap any thumbnail to:
+  - View full page preview
+  - Re-crop/re-rotate that page
+  - Retake only that page
+  - Move page left/right
+- Editing a single page invalidates only that page's OCR and downstream merged text slice; other pages remain intact and do not require recapture.
+
+#### 7.8.7 Acceptance criteria
+
+- Reordering pages in the thumbnail rail is reflected exactly in:
+  - Combined PDF page sequence
+  - `.docx` merged text sequence
+  - Per-page JPEG index suffixes
+- Replacing page *N* reprocesses only page *N* and updates exports without changing unaffected pages' binary hashes.
+- For a 5-page A4 packet on iPhone 15, end-to-end processing (stitch + OCR + metadata) completes within 25 seconds in offline mode.
+- If any page has confidence < 0.70, the UI surfaces both a per-page warning badge and a document-level warning banner before upload.
+- Multi-page export always yields exactly one `.pdf` and one `.docx`; optional JPEG count equals number of retained pages when enabled.
+
 ---
 
 ## 8. Non-Functional Requirements
@@ -361,7 +437,26 @@ Library screen (list)
 | App killed mid-processing | Persist capture state to disk before OCR begins; on next launch, offer to resume processing |
 | Family member not matched | Default to "Ukjent person" (unknown person) and prompt the user to assign before upload |
 
-### 10.5 Usability Patterns
+### 10.5 Multi-Page Review Flow (v1.1)
+
+```
+Tap "+" / Camera button
+    └─▶ Select "Scan multi-page"
+            └─▶ Capture loop (page thumbnails visible)
+                    ├─▶ [Add page]
+                    ├─▶ [Delete selected page]
+                    ├─▶ [Drag to reorder]
+                    └─▶ [Process]
+                            └─▶ Multi-page review & edit
+                                 - Thumbnail rail (tap/drag)
+                                 - Retake single page
+                                 - Re-crop/re-rotate single page
+                                 - Resolve metadata conflicts
+                                    └─▶ [Save & Upload]
+                                            └─▶ Library (single document entry with page count badge)
+```
+
+### 10.6 Usability Patterns
 
 - **Haptic feedback:** Light haptic on successful capture, medium haptic on successful upload, warning haptic on errors.
 - **Undo:** After deleting a document from the library, show a 5-second "Undo" snackbar before committing the deletion.
@@ -437,7 +532,7 @@ The following data types must be declared in App Store Connect (see also §14.5)
 
 ## 13. Future Considerations (v2+)
 
-- **Multi-page document support:** stitch multiple photos into a single paginated `.docx` / PDF.
+- **Advanced multi-page intelligence:** automatic page-separator detection, duplicate-page detection, and mixed-size page packs (A4 + receipts).
 - **iCloud Drive & Dropbox support** as alternative storage backends.
 - **In-app AI assistant:** Tap "Ask about this document" to get a plain-language Norwegian explanation of any document via an integrated LLM chat.
 - **HelseNorge / FHIR integration:** Cross-reference scanned documents with the user's official digital health record.
