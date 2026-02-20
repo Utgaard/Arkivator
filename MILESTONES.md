@@ -36,7 +36,7 @@ Each milestone is independently functional and testable. Later milestones build 
 
 **Goal:** A user can photograph a paper document with the camera, see it automatically cropped and enhanced, and have the processed image saved to the device.
 
-**Testable outcome:** Launching the Capture tab opens a camera; after shooting, the user sees an enhanced, perspective-corrected JPEG; the file is persisted under `NSFileProtectionComplete`; unit tests verify the image stays within resolution and file-size bounds.
+**Testable outcome:** Launching the Capture tab opens a camera; after shooting, the user sees an enhanced, perspective-corrected JPEG; the file is persisted under `NSFileProtectionCompleteUntilFirstUserAuthentication`; unit tests verify the image stays within resolution and file-size bounds.
 
 ### Tasks
 
@@ -49,7 +49,7 @@ Each milestone is independently functional and testable. Later milestones build 
 4. Enforce minimum output resolution of 2480 × 3508 px (300 DPI equivalent for A4).
 5. JPEG export with quality step-down loop to stay at or below 2 MB.
 6. Build a `ManualCropView` (SwiftUI overlay with four draggable corner handles) that the user can invoke if the auto-crop is wrong; re-runs the processing pipeline on confirm.
-7. Save the enhanced JPEG to `FileManager` under the app's Documents directory with `NSFileProtectionComplete`; store the local path in the corresponding `Document` record (created as a draft at this stage).
+7. Save the enhanced JPEG to `FileManager` under the app's Documents directory with `NSFileProtectionCompleteUntilFirstUserAuthentication`; store the local path in the corresponding `Document` record (created as a draft at this stage). This protection class is required so that `URLSession` background upload tasks (Milestone 8) can read the file when the device is locked; the file remains fully encrypted at rest and is inaccessible until the device is first unlocked after a reboot.
 8. Show the enhanced image in a minimal post-capture review screen with "Looks good" and "Retake" buttons.
 9. Unit tests: verify pipeline output meets resolution lower-bound and file-size upper-bound using a set of fixture images.
 10. UI test: tap Capture tab → camera presented → simulate image selection → enhanced image shown.
@@ -149,12 +149,18 @@ Each milestone is independently functional and testable. Later milestones build 
 3. Build personnummer detection: compile regex for both `DDMMYYNNNNN` (no space) and `DDMMYY NNNNN` (space-separated) patterns; run against `ocrText` during the OCR pipeline (Milestone 3) and surface result to the Review screen.
 4. Show a dismissible warning banner in `ReviewEditView` when a personnummer is detected: "Vi fant et personnummer i dokumentet. Vurder å redigere det bort."
 5. Generate an AES-256 encryption key on first launch; store it in Keychain under `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
-6. Encrypt any extracted personnummer value before writing to Core Data; add an `encryptedPersonnummer` attribute to the `Document` entity.
-7. Display personnummer in `DocumentDetailView` as `DDMMYY •••••`; provide a "Vis" button that requires Face ID authentication before revealing the full number.
-8. Implement one-tap redaction in `DocumentDetailView`: replaces all personnummer occurrences in `ocrText` with `[REDAKTET]`; updates Core Data; marks the local .docx as stale (triggers re-generation in Milestone 8 when Drive sync is available).
-9. Ensure personnummer never appears in filenames, `Document.title`, `keywords`, analytics events, or crash reports; add a `PIISanitizer` utility that strips personnummer patterns from any string before it is logged.
-10. Integrate `PIISanitizer` into the crash-reporting setup (configured in Milestone 9) so that no personnummer can appear in crash stacks or breadcrumbs.
-11. Unit tests: regex detection (valid and invalid inputs), AES-256 encryption/decryption round-trip, redaction leaves no personnummer in output string, `PIISanitizer` strips all variants.
+6. Define and enforce the two-tier file protection strategy across the whole app:
+   - **`NSFileProtectionCompleteUntilFirstUserAuthentication`** — all files placed on the `UploadQueue` (enhanced JPEGs, generated .docx files). These must remain readable by the `URLSession` background upload daemon when the screen is locked; the tradeoff is acceptable because the files are still fully encrypted and inaccessible until the device has been unlocked at least once since the last reboot.
+   - **`NSFileProtectionComplete`** — all other local artefacts that are never uploaded: original unprocessed captures, temporary working files, the Core Data SQLite store.
+   - Keychain items (OAuth2 refresh token, AES-256 encryption key) are governed by `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, independently of the file protection classes above.
+   - Implement a `SecureFileManager` wrapper with a `FileProtectionClass` enum to enforce the correct class at each write site and prevent accidental misclassification in future code.
+   - Unit test: write one file through each protection-class path, simulate a locked device state, and assert that only the `CompleteUntilFirstUserAuthentication` file is readable.
+7. Encrypt any extracted personnummer value before writing to Core Data; add an `encryptedPersonnummer` attribute to the `Document` entity.
+8. Display personnummer in `DocumentDetailView` as `DDMMYY •••••`; provide a "Vis" button that requires Face ID authentication before revealing the full number.
+9. Implement one-tap redaction in `DocumentDetailView`: replaces all personnummer occurrences in `ocrText` with `[REDAKTET]`; updates Core Data; marks the local .docx as stale (triggers re-generation in Milestone 8 when Drive sync is available).
+10. Ensure personnummer never appears in filenames, `Document.title`, `keywords`, analytics events, or crash reports; add a `PIISanitizer` utility that strips personnummer patterns from any string before it is logged.
+11. Integrate `PIISanitizer` into the crash-reporting setup (configured in Milestone 9) so that no personnummer can appear in crash stacks or breadcrumbs.
+12. Unit tests: regex detection (valid and invalid inputs), AES-256 encryption/decryption round-trip, redaction leaves no personnummer in output string, `PIISanitizer` strips all variants.
 
 ---
 
@@ -206,7 +212,7 @@ Each milestone is independently functional and testable. Later milestones build 
    - Body: OCR text; low-confidence passages wrapped in yellow highlight (using `w:rPr` shading).
    - Footer: "Skannet av Arkivator vX.Y — YYYY-MM-DD".
    - Custom document properties: all `Document` tag fields as key-value pairs (§7.4 schema).
-   - Write output to `FileManager` under `NSFileProtectionComplete`; store path in `Document.localDocxPath`.
+   - Write output to `FileManager` under `NSFileProtectionCompleteUntilFirstUserAuthentication`; store path in `Document.localDocxPath`. Same rationale as the JPEG (see Milestone 2, task 7): the `URLSession` background upload daemon must be able to read this file when the device is locked.
 5. Sanitise file names: strip `/ \ : * ? " < > |`; truncate to 240 chars; append ` (2)`, ` (3)` etc. if a file with the same name already exists in the Drive folder.
 6. Build `UploadQueue`:
    - Persistent queue backed by the `UploadQueueItem` Core Data entity (survives app termination).
